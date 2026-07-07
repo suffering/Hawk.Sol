@@ -1,0 +1,30 @@
+[package]
+name = "solhawk"
+version = "0.1.0"
+edition = "2021"
+description = "SolHawk CLI — circuit breaker status, control, and demo"
+repository = "https://github.com/SolHawk/solhawk"
+default-run = "solhawk"
+
+[[bin]]
+name = "solhawk"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive", "env"] }
+console = "0.15"
+indicatif = "0.17"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# RPC + transactions (commands wired in later phases)
+solana-client = "2.2"
+solana-sdk = "2.2"
+
+# Program types + instruction builders
+anchor-lang = "0.31.1"
+circuit_breaker = { path = "../programs/circuit_breaker", features = ["no-entrypoint"] }
+spl-token = "7.0"
+
+[dev-dependencies]

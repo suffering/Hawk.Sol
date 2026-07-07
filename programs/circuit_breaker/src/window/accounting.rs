@@ -8,6 +8,15 @@ pub struct WindowUpdateResult {
     pub tripped: bool,
 }
 
+/// Read-only view of window utilization after §6 bucket rollover.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EffectiveWindowView {
+    pub window_sum: u64,
+    pub current_idx: u8,
+    pub last_bucket_ts: i64,
+    pub bucket_duration: i64,
+}
+
 /// Compute the outflow threshold from live vault balance (no cached figures).
 pub fn compute_threshold(
     mode: ThresholdMode,
@@ -27,6 +36,26 @@ pub fn compute_threshold(
     }
 }
 
+/// Read-only §6 bucket advance: returns effective sum after rollover without mutating `window`.
+///
+/// `WindowState` is `Copy` (fixed `[u64; 12]` + scalars); we clone internally for preview.
+pub fn effective_window_sum(
+    window: &WindowState,
+    window_seconds: i64,
+    now: i64,
+) -> EffectiveWindowView {
+    let mut preview = *window;
+    advance_buckets(&mut preview, window_seconds, now);
+    let bucket_duration = window_seconds / BUCKET_COUNT as i64;
+
+    EffectiveWindowView {
+        window_sum: preview.buckets.iter().sum(),
+        current_idx: preview.current_idx,
+        last_bucket_ts: preview.last_bucket_ts,
+        bucket_duration,
+    }
+}
+
 /// Advance bucket-aligned window state and record outflow or signal trip.
 ///
 /// Implements §6 of the architecture doc. Mutates `window` before any transfer CPI
@@ -38,6 +67,30 @@ pub fn advance_and_check(
     amount: u64,
     threshold: u64,
 ) -> WindowUpdateResult {
+    advance_buckets(window, window_seconds, now);
+
+    let window_sum: u64 = window.buckets.iter().sum();
+
+    if window_sum.saturating_add(amount) > threshold {
+        return WindowUpdateResult {
+            window_sum,
+            threshold,
+            tripped: true,
+        };
+    }
+
+    let idx = window.current_idx as usize;
+    window.buckets[idx] = window.buckets[idx].saturating_add(amount);
+
+    WindowUpdateResult {
+        window_sum: window_sum.saturating_add(amount),
+        threshold,
+        tripped: false,
+    }
+}
+
+/// §6 bucket rollover: clear stale buckets and advance `current_idx` / `last_bucket_ts`.
+fn advance_buckets(window: &mut WindowState, window_seconds: i64, now: i64) {
     let n = BUCKET_COUNT as i64;
     let bucket_duration = window_seconds / n;
 
@@ -60,25 +113,6 @@ pub fn advance_and_check(
     }
 
     window.last_bucket_ts += elapsed * bucket_duration;
-
-    let window_sum: u64 = window.buckets.iter().sum();
-
-    if window_sum.saturating_add(amount) > threshold {
-        return WindowUpdateResult {
-            window_sum,
-            threshold,
-            tripped: true,
-        };
-    }
-
-    let idx = window.current_idx as usize;
-    window.buckets[idx] = window.buckets[idx].saturating_add(amount);
-
-    WindowUpdateResult {
-        window_sum: window_sum.saturating_add(amount),
-        threshold,
-        tripped: false,
-    }
 }
 
 #[cfg(test)]
@@ -97,6 +131,60 @@ mod tests {
         };
         w.initialize(start);
         w
+    }
+
+    #[test]
+    fn effective_window_sum_does_not_mutate_input() {
+        let mut window = fresh_window(1_000);
+        advance_and_check(&mut window, WINDOW_SECONDS, 1_500, 250, 10_000);
+        let snapshot = window;
+
+        let _ = effective_window_sum(&window, WINDOW_SECONDS, 2_000);
+
+        assert_eq!(window, snapshot);
+    }
+
+    #[test]
+    fn effective_window_sum_matches_advance_and_check_pre_record() {
+        let cases: &[(i64, u64, u64)] = &[
+            (0, 0, 100),
+            (0, 500, 200),
+            (BUCKET_DURATION, 400, 150),
+            (BUCKET_DURATION + 1, 800, 50),
+            (WINDOW_SECONDS + BUCKET_DURATION, 0, 300),
+        ];
+
+        for &(now, prior_outflow, amount) in cases {
+            let mut window = fresh_window(0);
+            if prior_outflow > 0 {
+                advance_and_check(&mut window, WINDOW_SECONDS, 0, prior_outflow, u64::MAX);
+            }
+
+            let snapshot = window;
+            let view = effective_window_sum(&window, WINDOW_SECONDS, now);
+            assert_eq!(snapshot, window);
+
+            let result = advance_and_check(&mut window, WINDOW_SECONDS, now, amount, u64::MAX);
+            assert!(!result.tripped);
+
+            let pre_record_sum = result.window_sum - amount;
+            assert_eq!(
+                view.window_sum, pre_record_sum,
+                "now={now} prior_outflow={prior_outflow} amount={amount}"
+            );
+        }
+    }
+
+    #[test]
+    fn effective_window_sum_matches_advance_and_check_pre_record_on_trip() {
+        let mut window = fresh_window(0);
+        advance_and_check(&mut window, WINDOW_SECONDS, 0, 900, 1_000);
+
+        let view = effective_window_sum(&window, WINDOW_SECONDS, 0);
+        let result = advance_and_check(&mut window, WINDOW_SECONDS, 0, 200, 1_000);
+
+        assert!(result.tripped);
+        assert_eq!(view.window_sum, result.window_sum);
     }
 
     #[test]
@@ -188,7 +276,7 @@ mod tests {
     #[test]
     fn pct_of_balance_uses_live_balance() {
         let balance = 1_000_000u64;
-        let bps = 1000u16; // 10%
+        let bps = 1000u16;
         let threshold = compute_threshold(ThresholdMode::PctOfBalance, 0, bps, balance);
         assert_eq!(threshold, 100_000);
 

@@ -3,7 +3,7 @@ use anchor_lang::prelude::*;
 pub const BUCKET_COUNT: usize = 12;
 
 #[account]
-#[derive(InitSpace)]
+#[derive(InitSpace, Copy, PartialEq, Eq, Debug)]
 pub struct WindowState {
     pub buckets: [u64; BUCKET_COUNT],
     pub current_idx: u8,
