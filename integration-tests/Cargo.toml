@@ -1,0 +1,18 @@
+[package]
+name = "circuit-breaker-tests"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+anchor-lang = "0.31.1"
+circuit_breaker = { path = "../programs/circuit_breaker", features = ["no-entrypoint"] }
+litesvm = "0.6.1"
+solana-clock = "2.2.1"
+solana-program-pack = "2.2.1"
+solana-sdk = "2.2.1"
+spl-associated-token-account = "6.0.0"
+spl-token = "7.0.0"
