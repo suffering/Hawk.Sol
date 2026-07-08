@@ -6,7 +6,7 @@ Hawk.Sol is an on-chain velocity breaker for SPL token vaults. It lets a protoco
 
 The command remains `solhawk`.
 
-![Hawk.Sol demo output](docs/assets/demo-output.png)
+![Hawk.Sol demo output](docs/assets/demo-output-v2.png)
 
 ## What It Does
 
