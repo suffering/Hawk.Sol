@@ -2,7 +2,7 @@
 name = "solhawk"
 version = "0.1.0"
 edition = "2021"
-description = "SolHawk CLI — circuit breaker status, control, and demo"
+description = "Hawk.Sol CLI — circuit breaker status, control, and demo"
 repository = "https://github.com/SolHawk/solhawk"
 default-run = "solhawk"
 

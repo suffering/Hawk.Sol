@@ -21,7 +21,7 @@ pub fn print_banner(palette: &Palette) {
         "{}",
         palette
             .brand()
-            .apply_to("  SolHawk — Solana Circuit Breaker Protocol")
+            .apply_to("  Hawk.Sol — Solana Circuit Breaker Protocol")
     );
     println!();
 }

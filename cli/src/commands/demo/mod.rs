@@ -33,7 +33,7 @@ pub fn run(global: &GlobalOpts, args: DemoArgs) -> Result<()> {
     let token_kps = DemoKeypairs::token_accounts_from_seed(args.seed);
 
     ui.println_preflight(&format!(
-        "SolHawk demo (seed={}) — localnet proof of efficacy",
+        "Hawk.Sol demo (seed={}) — localnet proof of efficacy",
         args.seed
     ));
 

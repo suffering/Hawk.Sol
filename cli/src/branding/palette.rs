@@ -1,6 +1,7 @@
 use console::Style;
 
-/// Centralized terminal palette. Amber/gold accents; semantic greens/reds/yellows.
+/// Centralized terminal palette. Violet/magenta brand accents; semantic greens/reds;
+/// yellow reserved for warnings and paused state.
 #[derive(Clone, Copy)]
 pub struct Palette {
     pub enabled: bool,
@@ -9,6 +10,27 @@ pub struct Palette {
 impl Palette {
     pub fn new(enabled: bool) -> Self {
         Self { enabled }
+    }
+
+    /// Brand/accent violet — 256-color on capable terminals, magenta fallback.
+    fn primary_color() -> console::Color {
+        if console::Term::stdout().features().colors_supported() {
+            console::Color::Color256(141)
+        } else {
+            console::Color::Magenta
+        }
+    }
+
+    fn style_primary(&self, bold: bool) -> Style {
+        if self.enabled {
+            let mut s = Style::new().fg(Self::primary_color());
+            if bold {
+                s = s.bold();
+            }
+            s
+        } else {
+            Style::new()
+        }
     }
 
     fn style(&self, color: console::Color, bold: bool) -> Style {
@@ -24,11 +46,11 @@ impl Palette {
     }
 
     pub fn brand(&self) -> Style {
-        self.style(console::Color::Yellow, true)
+        self.style_primary(true)
     }
 
     pub fn accent(&self) -> Style {
-        self.style(console::Color::Yellow, false)
+        self.style_primary(false)
     }
 
     pub fn active(&self) -> Style {
@@ -57,5 +79,17 @@ impl Palette {
 
     pub fn ok(&self) -> Style {
         self.style(console::Color::Green, false)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn disabled_palette_emits_no_ansi_codes() {
+        let palette = Palette::new(false);
+        let styled = palette.brand().apply_to("Hawk.Sol").to_string();
+        assert!(!styled.contains('\u{1b}'), "plain palette must not embed escape codes");
     }
 }

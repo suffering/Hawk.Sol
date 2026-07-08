@@ -6,7 +6,7 @@ use crate::config::DEFAULT_RPC_URL;
 #[derive(Parser)]
 #[command(
     name = "solhawk",
-    about = "SolHawk — Solana Circuit Breaker Protocol CLI",
+    about = "Hawk.Sol — Solana Circuit Breaker Protocol CLI",
     long_version = concat!(
         env!("CARGO_PKG_VERSION"),
         "\nhttps://github.com/SolHawk/solhawk"
