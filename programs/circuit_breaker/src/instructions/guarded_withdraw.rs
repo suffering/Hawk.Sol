@@ -47,7 +47,8 @@ pub fn process_guarded_withdraw(
             threshold: result.threshold,
             manual: false,
         });
-        // Return Ok so trip state persists (a failing instruction would roll back the trip).
+        // Return Ok so trip state persists (a failing instruction would roll back the trip);
+        // the token::transfer CPI below is unreachable on this path.
         return Ok(());
     }
 

@@ -9,4 +9,4 @@ pub mod tx;
 
 pub use config::fetch_breaker_config;
 pub use status::fetch_status_snapshot;
-pub use tx::execute_transaction;
+pub use tx::{execute_transaction, try_execute_transaction, TxFailure, TxOutcome};

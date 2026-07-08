@@ -68,10 +68,12 @@ pub enum Commands {
         yes: bool,
     },
 
-    /// §11 proof-of-efficacy demo on localnet.
+    /// §11 proof-of-efficacy demo on localnet (~60s with defaults).
     ///
-    /// Requires a local validator (e.g. `solana-test-validator --reset`) with the
-    /// circuit_breaker program deployed (`anchor deploy`).
+    /// Spins up deterministic mint/vault/breaker state, runs normal withdrawals,
+    /// simulates a rapid drain until velocity trips, then prints attack take vs cap.
+    /// Requires a local validator with `circuit_breaker` deployed (`anchor deploy`).
+    /// Use `--spawn-validator` to launch `solana-test-validator` from a temp ledger dir.
     Demo(DemoArgs),
 }
 
@@ -162,4 +164,8 @@ pub struct DemoArgs {
     /// Display price per token for summary (USD)
     #[arg(long, default_value = "1.0")]
     pub unit_price: f64,
+
+    /// Machine-readable JSON summary at end (no colors or banner)
+    #[arg(long)]
+    pub json: bool,
 }

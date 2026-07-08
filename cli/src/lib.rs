@@ -19,7 +19,7 @@ pub fn main_entry() -> Result<()> {
 
     let show_banner = is_tty_stdout()
         && !cli.global.quiet
-        && !status_wants_json(&cli);
+        && !wants_json_output(&cli);
 
     if show_banner {
         print_banner(&terminal_palette(cli.global.quiet));
@@ -28,9 +28,9 @@ pub fn main_entry() -> Result<()> {
     commands::run(cli)
 }
 
-fn status_wants_json(cli: &Cli) -> bool {
+fn wants_json_output(cli: &Cli) -> bool {
     matches!(
         cli.command,
-        cli::Commands::Status { json: true, .. }
+        cli::Commands::Status { json: true, .. } | cli::Commands::Demo(crate::cli::DemoArgs { json: true, .. })
     )
 }
