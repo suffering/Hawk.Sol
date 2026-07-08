@@ -1,7 +1,9 @@
 pub mod config;
+pub mod pending;
 pub mod window;
 
 pub use config::*;
+pub use pending::*;
 pub use window::*;
 
 /// PDA seed for `BreakerConfig`.

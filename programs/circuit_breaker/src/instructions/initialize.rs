@@ -1,16 +1,13 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{set_authority, SetAuthority};
 
-use crate::error::BreakerError;
-use crate::state::{BreakerState, AUTHORITY_SEED, BUCKET_COUNT};
+use crate::state::{BreakerState, AUTHORITY_SEED};
 use crate::{InitializeBreaker, InitializeBreakerParams};
 
+use super::validate::validate_mutable_config_params;
+
 pub fn process_initialize(ctx: Context<InitializeBreaker>, params: InitializeBreakerParams) -> Result<()> {
-    require!(
-        params.window_seconds > 0 && params.window_seconds % BUCKET_COUNT as i64 == 0,
-        BreakerError::InvalidWindowSeconds
-    );
-    require!(params.max_bps <= 10_000, BreakerError::InvalidMaxBps);
+    validate_mutable_config_params(params.window_seconds, params.max_bps)?;
 
     let authority_bump = ctx.bumps.breaker_authority;
     let now = Clock::get()?.unix_timestamp;

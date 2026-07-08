@@ -26,4 +26,14 @@ pub enum BreakerError {
     NotTripped,
     #[msg("Guardian signature required when auto_recover is disabled")]
     GuardianRequired,
+    #[msg("A config change is already pending for this breaker")]
+    PendingConfigExists,
+    #[msg("Timelock has not elapsed; execute_config_change is not yet allowed")]
+    TimelockNotElapsed,
+    #[msg("No pending config change exists for this breaker")]
+    NoPendingConfig,
+    #[msg("requested_delay must be non-negative")]
+    InvalidRequestedDelay,
+    #[msg("emergency_route_to_safe requires the breaker to be Tripped")]
+    EmergencyRouteRequiresTripped,
 }

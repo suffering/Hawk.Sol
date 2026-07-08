@@ -89,8 +89,14 @@ pub struct InitArgs {
     #[arg(long)]
     pub operator: Option<Pubkey>,
     /// Immutable safe destination
-    #[arg(long)]
+    #[arg(long, alias = "destination")]
     pub safe_destination: Option<Pubkey>,
+    /// Skip confirmation prompt
+    #[arg(long)]
+    pub yes: bool,
+    /// Keypair that currently owns the vault (defaults to --keypair)
+    #[arg(long)]
+    pub vault_authority_keypair: Option<String>,
     #[arg(long, default_value = "3600")]
     pub window_seconds: i64,
     #[arg(long, value_enum, default_value = "max")]

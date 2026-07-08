@@ -1,15 +1,21 @@
 use std::path::PathBuf;
 
 use anchor_lang::{AccountDeserialize, InstructionData, ToAccountMetas};
-use circuit_breaker::accounts::{GuardedWithdraw, InitializeBreaker, Resume, Trip};
+use circuit_breaker::accounts::{
+    CancelConfigChange, EmergencyRouteToSafe, ExecuteConfigChange, GuardedWithdraw,
+    InitializeBreaker, ProposeConfigChange, Resume, Trip,
+};
 use circuit_breaker::instruction::{
-    GuardedWithdraw as GuardedWithdrawIx, InitializeBreaker as InitializeBreakerIx,
+    CancelConfigChange as CancelConfigChangeIx, EmergencyRouteToSafe as EmergencyRouteToSafeIx,
+    ExecuteConfigChange as ExecuteConfigChangeIx, GuardedWithdraw as GuardedWithdrawIx,
+    InitializeBreaker as InitializeBreakerIx, ProposeConfigChange as ProposeConfigChangeIx,
     Resume as ResumeIx, Trip as TripIx,
 };
 use circuit_breaker::state::{
-    AUTHORITY_SEED, BREAKER_CONFIG_SEED, WINDOW_STATE_SEED, BreakerConfig,
+    AUTHORITY_SEED, BREAKER_CONFIG_SEED, PENDING_CONFIG_SEED, WINDOW_STATE_SEED, BreakerConfig,
+    PendingConfigChange, WindowState,
 };
-use circuit_breaker::{InitializeBreakerParams, ID as PROGRAM_ID};
+use circuit_breaker::{InitializeBreakerParams, ProposedConfigParams, ID as PROGRAM_ID};
 use litesvm::LiteSVM;
 use solana_clock::Clock;
 use solana_program_pack::Pack;
@@ -214,6 +220,138 @@ impl BreakerTestContext {
         Pubkey::find_program_address(&[AUTHORITY_SEED, self.vault.as_ref()], &PROGRAM_ID)
     }
 
+    pub fn derive_pending_config(&self) -> (Pubkey, u8) {
+        Pubkey::find_program_address(&[PENDING_CONFIG_SEED, self.vault.as_ref()], &PROGRAM_ID)
+    }
+
+    pub fn get_pending_config(&self) -> PendingConfigChange {
+        let (addr, _) = self.derive_pending_config();
+        let account = self.svm.get_account(&addr).expect("pending_config");
+        PendingConfigChange::try_deserialize(&mut account.data.as_slice())
+            .expect("deserialize pending")
+    }
+
+    pub fn get_window_state(&self) -> WindowState {
+        let (addr, _) = self.derive_window_state();
+        let account = self.svm.get_account(&addr).expect("window_state");
+        WindowState::try_deserialize(&mut account.data.as_slice()).expect("deserialize window")
+    }
+
+    pub fn propose_config_change(
+        &mut self,
+        keys: &TestKeypairs,
+        new_params: ProposedConfigParams,
+        requested_delay: i64,
+    ) -> Result<(), String> {
+        let (breaker_config, _) = self.derive_breaker_config();
+        let (pending_config, _) = self.derive_pending_config();
+
+        let accounts = ProposeConfigChange {
+            guardian: keys.guardian.pubkey(),
+            payer: keys.payer.pubkey(),
+            breaker_config,
+            pending_config,
+            system_program: system_program::ID,
+        };
+
+        let ix = solana_sdk::instruction::Instruction {
+            program_id: PROGRAM_ID,
+            accounts: accounts.to_account_metas(None),
+            data: ProposeConfigChangeIx {
+                new_params,
+                requested_delay,
+            }
+            .data(),
+        };
+
+        self.send(&[ix], &[&keys.payer, &keys.guardian])
+            .map_err(|e| format!("{e:?}"))
+    }
+
+    pub fn execute_config_change(&mut self, keys: &TestKeypairs) -> Result<(), String> {
+        let (breaker_config, _) = self.derive_breaker_config();
+        let (window_state, _) = self.derive_window_state();
+        let (pending_config, _) = self.derive_pending_config();
+
+        let accounts = ExecuteConfigChange {
+            guardian: keys.guardian.pubkey(),
+            payer: keys.payer.pubkey(),
+            breaker_config,
+            window_state,
+            pending_config,
+        };
+
+        let ix = solana_sdk::instruction::Instruction {
+            program_id: PROGRAM_ID,
+            accounts: accounts.to_account_metas(None),
+            data: ExecuteConfigChangeIx {}.data(),
+        };
+
+        self.send(&[ix], &[&keys.payer, &keys.guardian])
+            .map_err(|e| format!("{e:?}"))
+    }
+
+    pub fn cancel_config_change(&mut self, keys: &TestKeypairs) -> Result<(), String> {
+        let (breaker_config, _) = self.derive_breaker_config();
+        let (pending_config, _) = self.derive_pending_config();
+
+        let accounts = CancelConfigChange {
+            guardian: keys.guardian.pubkey(),
+            payer: keys.payer.pubkey(),
+            breaker_config,
+            pending_config,
+        };
+
+        let ix = solana_sdk::instruction::Instruction {
+            program_id: PROGRAM_ID,
+            accounts: accounts.to_account_metas(None),
+            data: CancelConfigChangeIx {}.data(),
+        };
+
+        self.send(&[ix], &[&keys.payer, &keys.guardian])
+            .map_err(|e| format!("{e:?}"))
+    }
+
+    pub fn emergency_route_to_safe(
+        &mut self,
+        keys: &TestKeypairs,
+        amount: u64,
+        destination: Pubkey,
+    ) -> Result<(), String> {
+        let (breaker_config, _) = self.derive_breaker_config();
+        let (breaker_authority, _) = self.derive_authority();
+
+        let accounts = EmergencyRouteToSafe {
+            guardian: keys.guardian.pubkey(),
+            breaker_config,
+            vault: self.vault,
+            safe_destination: destination,
+            breaker_authority,
+            token_program: spl_token::ID,
+        };
+
+        let ix = solana_sdk::instruction::Instruction {
+            program_id: PROGRAM_ID,
+            accounts: accounts.to_account_metas(None),
+            data: EmergencyRouteToSafeIx { amount }.data(),
+        };
+
+        self.send(&[ix], &[&keys.guardian]).map_err(|e| format!("{e:?}"))
+    }
+
+    pub fn create_alt_destination(&mut self, keys: &TestKeypairs, owner: &Pubkey) -> Pubkey {
+        let mint = self.mint;
+        self.create_token_account(&keys.payer, &mint, owner)
+    }
+
+    pub fn pending_config_exists(&self) -> bool {
+        let (addr, _) = self.derive_pending_config();
+        match self.svm.get_account(&addr) {
+            Some(account) => account.owner == PROGRAM_ID && account.data.len() >= 8,
+            None => false,
+        }
+    }
+
     pub fn airdrop(&mut self, pubkey: &Pubkey, lamports: u64) {
         self.svm
             .airdrop(pubkey, lamports)
@@ -253,7 +391,7 @@ impl BreakerTestContext {
         mint.pubkey()
     }
 
-    fn create_token_account(
+    pub fn create_token_account(
         &mut self,
         payer: &Keypair,
         mint: &Pubkey,

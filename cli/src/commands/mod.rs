@@ -3,6 +3,7 @@ pub mod init;
 pub mod resume;
 pub mod status;
 pub mod trip;
+pub mod tx_output;
 
 // Phase 2+: watch, config-change, emergency-route
 

@@ -9,8 +9,11 @@ use anchor_spl::token::{Mint, Token, TokenAccount};
 
 use crate::error::BreakerError;
 use crate::state::{
-    BreakerConfig, WindowState, AUTHORITY_SEED, BREAKER_CONFIG_SEED, WINDOW_STATE_SEED,
+    BreakerConfig, PendingConfigChange, WindowState, AUTHORITY_SEED, BREAKER_CONFIG_SEED,
+    PENDING_CONFIG_SEED, WINDOW_STATE_SEED,
 };
+
+pub use crate::state::ProposedConfigParams;
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
 pub struct InitializeBreakerParams {
@@ -140,6 +143,123 @@ pub struct Resume<'info> {
     pub breaker_config: Account<'info, BreakerConfig>,
 }
 
+#[derive(Accounts)]
+pub struct ProposeConfigChange<'info> {
+    pub guardian: Signer<'info>,
+
+    #[account(mut)]
+    pub payer: Signer<'info>,
+
+    #[account(
+        seeds = [BREAKER_CONFIG_SEED, breaker_config.vault.as_ref()],
+        bump,
+        constraint = breaker_config.guardian == guardian.key() @ BreakerError::UnauthorizedGuardian,
+    )]
+    pub breaker_config: Account<'info, BreakerConfig>,
+
+    #[account(
+        init,
+        payer = payer,
+        space = 8 + PendingConfigChange::INIT_SPACE,
+        seeds = [PENDING_CONFIG_SEED, breaker_config.vault.as_ref()],
+        bump,
+    )]
+    pub pending_config: Account<'info, PendingConfigChange>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct ExecuteConfigChange<'info> {
+    pub guardian: Signer<'info>,
+
+    #[account(mut)]
+    pub payer: Signer<'info>,
+
+    #[account(
+        mut,
+        seeds = [BREAKER_CONFIG_SEED, breaker_config.vault.as_ref()],
+        bump,
+        constraint = breaker_config.guardian == guardian.key() @ BreakerError::UnauthorizedGuardian,
+    )]
+    pub breaker_config: Account<'info, BreakerConfig>,
+
+    #[account(
+        mut,
+        seeds = [WINDOW_STATE_SEED, breaker_config.vault.as_ref()],
+        bump,
+    )]
+    pub window_state: Account<'info, WindowState>,
+
+    #[account(
+        mut,
+        close = payer,
+        seeds = [PENDING_CONFIG_SEED, breaker_config.vault.as_ref()],
+        bump = pending_config.bump,
+        constraint = pending_config.breaker_config == breaker_config.key() @ BreakerError::NoPendingConfig,
+    )]
+    pub pending_config: Account<'info, PendingConfigChange>,
+}
+
+#[derive(Accounts)]
+pub struct CancelConfigChange<'info> {
+    pub guardian: Signer<'info>,
+
+    #[account(mut)]
+    pub payer: Signer<'info>,
+
+    #[account(
+        seeds = [BREAKER_CONFIG_SEED, breaker_config.vault.as_ref()],
+        bump,
+        constraint = breaker_config.guardian == guardian.key() @ BreakerError::UnauthorizedGuardian,
+    )]
+    pub breaker_config: Account<'info, BreakerConfig>,
+
+    #[account(
+        mut,
+        close = payer,
+        seeds = [PENDING_CONFIG_SEED, breaker_config.vault.as_ref()],
+        bump = pending_config.bump,
+        constraint = pending_config.breaker_config == breaker_config.key() @ BreakerError::NoPendingConfig,
+    )]
+    pub pending_config: Account<'info, PendingConfigChange>,
+}
+
+#[derive(Accounts)]
+pub struct EmergencyRouteToSafe<'info> {
+    pub guardian: Signer<'info>,
+
+    #[account(
+        seeds = [BREAKER_CONFIG_SEED, breaker_config.vault.as_ref()],
+        bump,
+        constraint = breaker_config.guardian == guardian.key() @ BreakerError::UnauthorizedGuardian,
+    )]
+    pub breaker_config: Account<'info, BreakerConfig>,
+
+    #[account(
+        mut,
+        constraint = vault.key() == breaker_config.vault,
+        constraint = vault.mint == breaker_config.token_mint,
+    )]
+    pub vault: Account<'info, TokenAccount>,
+
+    #[account(
+        mut,
+        constraint = safe_destination.key() == breaker_config.safe_destination @ BreakerError::DestinationMismatch,
+        constraint = safe_destination.mint == breaker_config.token_mint,
+    )]
+    pub safe_destination: Account<'info, TokenAccount>,
+
+    /// CHECK: Breaker authority PDA — sole signer for vault transfers.
+    #[account(
+        seeds = [AUTHORITY_SEED, breaker_config.vault.as_ref()],
+        bump = breaker_config.authority_bump,
+    )]
+    pub breaker_authority: UncheckedAccount<'info>,
+
+    pub token_program: Program<'info, Token>,
+}
+
 declare_id!("7Wuw9J1cW8V2R1KAA6T3y3bRDpBYJ5FkQWMj8gDKb1MW");
 
 #[program]
@@ -167,5 +287,32 @@ pub mod circuit_breaker {
 
     pub fn resume(ctx: Context<Resume>) -> Result<()> {
         instructions::resume_ix::process_resume(ctx)
+    }
+
+    pub fn propose_config_change(
+        ctx: Context<ProposeConfigChange>,
+        new_params: ProposedConfigParams,
+        requested_delay: i64,
+    ) -> Result<()> {
+        instructions::propose_config_change::process_propose_config_change(
+            ctx,
+            new_params,
+            requested_delay,
+        )
+    }
+
+    pub fn execute_config_change(ctx: Context<ExecuteConfigChange>) -> Result<()> {
+        instructions::execute_config_change::process_execute_config_change(ctx)
+    }
+
+    pub fn cancel_config_change(ctx: Context<CancelConfigChange>) -> Result<()> {
+        instructions::cancel_config_change::process_cancel_config_change(ctx)
+    }
+
+    pub fn emergency_route_to_safe(
+        ctx: Context<EmergencyRouteToSafe>,
+        amount: u64,
+    ) -> Result<()> {
+        instructions::emergency_route_to_safe::process_emergency_route_to_safe(ctx, amount)
     }
 }
