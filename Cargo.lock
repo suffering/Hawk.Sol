@@ -6284,6 +6284,7 @@ version = "0.1.0"
 dependencies = [
  "anchor-lang",
  "anyhow",
+ "bincode",
  "circuit_breaker",
  "clap",
  "console",

@@ -6,12 +6,17 @@ description = "SolHawk CLI — circuit breaker status, control, and demo"
 repository = "https://github.com/SolHawk/solhawk"
 default-run = "solhawk"
 
+[lib]
+name = "solhawk"
+path = "src/lib.rs"
+
 [[bin]]
 name = "solhawk"
 path = "src/main.rs"
 
 [dependencies]
 anyhow = "1"
+bincode = "1.3"
 clap = { version = "4", features = ["derive", "env"] }
 console = "0.15"
 indicatif = "0.17"
